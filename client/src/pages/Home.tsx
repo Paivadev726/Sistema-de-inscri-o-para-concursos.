@@ -4,8 +4,7 @@ import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { RefreshCw, ExternalLink, LogIn, UserCircle, ShieldCheck } from "lucide-react";
-import { LoginModal } from "@/components/LoginModal";
+import { RefreshCw, ExternalLink, UserCircle, ShieldCheck } from "lucide-react";
 
 const SYNE = "'Syne', sans-serif";
 const MONO = "'JetBrains Mono', monospace";
@@ -36,7 +35,6 @@ const STATUS = {
 export default function Home() {
   const { user, isAuthenticated, refresh } = useAuth();
   const [, navigate] = useLocation();
-  const [loginOpen, setLoginOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<"todos" | "aberto" | "previsto" | "encerrado">("todos");
   const utils = trpc.useUtils();
@@ -129,16 +127,7 @@ export default function Home() {
                   </button>
                 )}
               </>
-            ) : (
-              <button
-                onClick={() => setLoginOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold text-white transition-opacity hover:opacity-90"
-                style={{ background: BLUE }}
-              >
-                <LogIn className="h-3.5 w-3.5" />
-                Entrar
-              </button>
-            )}
+            ) : null}
           </div>
         </div>
       </header>
@@ -201,8 +190,6 @@ export default function Home() {
                   concurso={c}
                   status={status}
                   cfg={cfg}
-                  isAuthenticated={isAuthenticated}
-                  onLoginClick={() => setLoginOpen(true)}
                   onInscreverClick={() => navigate(`/inscricao/${c.id}`)}
                 />
               );
@@ -211,11 +198,6 @@ export default function Home() {
         )}
       </main>
 
-      <LoginModal
-        open={loginOpen}
-        onClose={() => setLoginOpen(false)}
-        onSuccess={() => refresh()}
-      />
     </div>
   );
 }
@@ -260,12 +242,10 @@ type CardProps = {
   };
   status: "aberto" | "previsto" | "encerrado";
   cfg: typeof STATUS["aberto"];
-  isAuthenticated: boolean;
-  onLoginClick: () => void;
   onInscreverClick: () => void;
 };
 
-function ConcursoCard({ concurso: c, status, cfg, isAuthenticated, onLoginClick, onInscreverClick }: CardProps) {
+function ConcursoCard({ concurso: c, status, cfg, onInscreverClick }: CardProps) {
   const pciLink   = c.edital   || null;
   const bancaLink = c.urlBanca || pciLink;
   const valorFmt = Number(c.valorInscricao).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
@@ -309,21 +289,13 @@ function ConcursoCard({ concurso: c, status, cfg, isAuthenticated, onLoginClick,
         <div className="mt-4 flex flex-wrap gap-2 items-center">
           {status === "encerrado" ? (
             <span className="text-xs text-slate-400 font-medium">Inscrições encerradas</span>
-          ) : isAuthenticated ? (
+          ) : (
             <button
               onClick={onInscreverClick}
               className="px-3 py-1.5 rounded text-xs font-semibold text-white transition-opacity hover:opacity-90"
               style={{ background: BLUE }}
             >
               Se Inscrever
-            </button>
-          ) : (
-            <button
-              onClick={onLoginClick}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border text-blue-700 border-blue-200 hover:bg-blue-50 transition-colors"
-            >
-              <LogIn className="h-3 w-3" />
-              Entrar para se inscrever
             </button>
           )}
 
