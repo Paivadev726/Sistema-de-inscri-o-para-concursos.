@@ -90,6 +90,7 @@ export const appRouter = router({
       valorInscricao: z.string(),
       descricao: z.string().optional(),
       edital: z.string().optional(),
+      urlBanca: z.string().optional(),
     })).mutation(({ ctx, input }) => {
       if (ctx.user?.role !== 'admin') {
         throw new Error('Apenas administradores podem criar concursos');
@@ -111,6 +112,7 @@ export const appRouter = router({
       valorInscricao: z.string().optional(),
       descricao: z.string().optional().nullable(),
       edital: z.string().optional().nullable(),
+      urlBanca: z.string().optional().nullable(),
     })).mutation(({ ctx, input }) => {
       if (ctx.user?.role !== 'admin') {
         throw new Error('Apenas administradores podem editar concursos');

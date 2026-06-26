@@ -41,6 +41,7 @@ export const concursos = mysqlTable("concursos", {
   valorInscricao: decimal("valorInscricao", { precision: 10, scale: 2 }).notNull(),
   descricao: text("descricao"),
   edital: varchar("edital", { length: 500 }),
+  urlBanca: varchar("urlBanca", { length: 500 }),
   status: mysqlEnum("status", ["ativo", "inativo"]).default("ativo").notNull(),
   criadoEm: timestamp("criadoEm").defaultNow().notNull(),
   atualizadoEm: timestamp("atualizadoEm").defaultNow().onUpdateNow().notNull(),

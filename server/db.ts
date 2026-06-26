@@ -2,6 +2,8 @@ import { eq, and, desc, like, gte, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, concursos, inscricoes, dadosPessoais, Concurso, Inscricao, DadosPessoais, InsertConcurso, InsertInscricao, InsertDadosPessoais } from "../drizzle/schema";
 import { ENV } from './_core/env';
+import { existsSync, readFileSync } from "fs";
+import { resolve } from "path";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -89,18 +91,126 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+const CONCURSOS_MOCK: Concurso[] = [
+  {
+    id: 1,
+    nome: "Concurso Público - Ministério da Educação",
+    cargo: "Analista de Sistemas",
+    vagas: 50,
+    banca: "CESPE",
+    dataInscricaoInicio: "2026-06-15",
+    dataInscricaoFim: "2026-07-15",
+    dataProva: "2026-08-20",
+    valorInscricao: "150.00",
+    descricao: "Concurso para preenchimento de vagas de Analista de Sistemas",
+    edital: "https://exemplo.com/edital1",
+    urlBanca: null,
+    status: "ativo",
+    criadoEm: new Date("2026-06-01"),
+    atualizadoEm: new Date("2026-06-01"),
+  },
+  {
+    id: 2,
+    nome: "Concurso Público - Receita Federal",
+    cargo: "Auditor-Fiscal",
+    vagas: 100,
+    banca: "ESAF",
+    dataInscricaoInicio: "2026-06-01",
+    dataInscricaoFim: "2026-06-30",
+    dataProva: "2026-08-10",
+    valorInscricao: "200.00",
+    descricao: "Concurso para Auditor-Fiscal da Receita Federal",
+    edital: "https://exemplo.com/edital2",
+    urlBanca: null,
+    status: "ativo",
+    criadoEm: new Date("2026-06-01"),
+    atualizadoEm: new Date("2026-06-01"),
+  },
+  {
+    id: 3,
+    nome: "Concurso Público - Polícia Federal",
+    cargo: "Agente de Polícia Federal",
+    vagas: 200,
+    banca: "CESPE",
+    dataInscricaoInicio: "2026-07-01",
+    dataInscricaoFim: "2026-07-31",
+    dataProva: "2026-09-15",
+    valorInscricao: "180.00",
+    descricao: "Concurso para Agente de Polícia Federal",
+    edital: "https://exemplo.com/edital3",
+    urlBanca: null,
+    status: "ativo",
+    criadoEm: new Date("2026-06-01"),
+    atualizadoEm: new Date("2026-06-01"),
+  },
+  {
+    id: 4,
+    nome: "Concurso Público - Banco do Brasil",
+    cargo: "Escriturário",
+    vagas: 150,
+    banca: "CESGRANRIO",
+    dataInscricaoInicio: "2026-05-15",
+    dataInscricaoFim: "2026-06-15",
+    dataProva: "2026-07-20",
+    valorInscricao: "120.00",
+    descricao: "Concurso para Escriturário do Banco do Brasil",
+    edital: "https://exemplo.com/edital4",
+    urlBanca: null,
+    status: "ativo",
+    criadoEm: new Date("2026-06-01"),
+    atualizadoEm: new Date("2026-06-01"),
+  },
+  {
+    id: 5,
+    nome: "Concurso Público - TCU",
+    cargo: "Auditor Federal de Controle Externo",
+    vagas: 80,
+    banca: "CESPE",
+    dataInscricaoInicio: "2026-08-01",
+    dataInscricaoFim: "2026-08-31",
+    dataProva: "2026-10-10",
+    valorInscricao: "250.00",
+    descricao: "Concurso para Auditor Federal de Controle Externo",
+    edital: "https://exemplo.com/edital5",
+    urlBanca: null,
+    status: "ativo",
+    criadoEm: new Date("2026-06-01"),
+    atualizadoEm: new Date("2026-06-01"),
+  },
+];
+
 // Concursos queries
 export async function getConcursos() {
   const db = await getDb();
-  if (!db) return [];
-  return db.select().from(concursos).where(eq(concursos.status, 'ativo')).orderBy(desc(concursos.criadoEm));
+  if (db) {
+    return db.select().from(concursos).where(eq(concursos.status, 'ativo')).orderBy(desc(concursos.criadoEm));
+  }
+
+  // Camada 2: JSON gerado pelo scraper Python
+  const jsonPath = resolve(process.cwd(), "scraper", "concursos_scraped.json");
+  if (existsSync(jsonPath)) {
+    try {
+      const raw = JSON.parse(readFileSync(jsonPath, "utf-8"));
+      return (raw.concursos as Omit<Concurso, "id" | "criadoEm" | "atualizadoEm">[]).map(
+        (c, i) => ({ ...c, id: i + 1, criadoEm: new Date(), atualizadoEm: new Date() } as Concurso)
+      );
+    } catch {
+      console.warn("[db] concursos_scraped.json inválido, usando mock");
+    }
+  }
+
+  // Camada 3: mock hardcoded
+  return CONCURSOS_MOCK;
 }
 
 export async function getConcursoById(id: number) {
   const db = await getDb();
-  if (!db) return undefined;
-  const result = await db.select().from(concursos).where(eq(concursos.id, id)).limit(1);
-  return result.length > 0 ? result[0] : undefined;
+  if (db) {
+    const result = await db.select().from(concursos).where(eq(concursos.id, id)).limit(1);
+    return result.length > 0 ? result[0] : undefined;
+  }
+  const lista = await getConcursos();
+  return lista.find(c => c.id === id);
 }
 
 export async function createConcurso(data: InsertConcurso) {

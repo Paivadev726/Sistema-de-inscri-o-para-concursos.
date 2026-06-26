@@ -257,6 +257,7 @@ type CardProps = {
     dataInscricaoFim: string;
     dataProva?: string | null;
     edital?: string | null;
+    urlBanca?: string | null;
   };
   status: "aberto" | "previsto" | "encerrado";
   cfg: typeof STATUS["aberto"];
@@ -266,7 +267,8 @@ type CardProps = {
 };
 
 function ConcursoCard({ concurso: c, status, cfg, isAuthenticated, onLoginClick, onInscreverClick }: CardProps) {
-  const pciLink = c.edital || null;
+  const pciLink   = c.edital   || null;
+  const bancaLink = c.urlBanca || pciLink;
   const valorFmt = Number(c.valorInscricao).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
 
   return (
@@ -325,20 +327,20 @@ function ConcursoCard({ concurso: c, status, cfg, isAuthenticated, onLoginClick,
           )}
 
           {pciLink && (
-            <>
-              <a href={pciLink} target="_blank" rel="noopener noreferrer">
-                <button className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
-                  <ExternalLink className="h-3 w-3" />
-                  Edital PCI
-                </button>
-              </a>
-              <a href={pciLink} target="_blank" rel="noopener noreferrer">
-                <button className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors">
-                  <ExternalLink className="h-3 w-3" />
-                  Portal da Banca
-                </button>
-              </a>
-            </>
+            <a href={pciLink} target="_blank" rel="noopener noreferrer">
+              <button className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
+                <ExternalLink className="h-3 w-3" />
+                Edital PCI
+              </button>
+            </a>
+          )}
+          {bancaLink && (
+            <a href={bancaLink} target="_blank" rel="noopener noreferrer">
+              <button className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors">
+                <ExternalLink className="h-3 w-3" />
+                Portal da Banca
+              </button>
+            </a>
           )}
         </div>
       </div>
