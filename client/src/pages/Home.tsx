@@ -1,327 +1,347 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
-import { getLoginUrl } from "@/const";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, ExternalLink, LogIn, UserCircle, ShieldCheck } from "lucide-react";
 import { LoginModal } from "@/components/LoginModal";
+
+const SYNE = "'Syne', sans-serif";
+const MONO = "'JetBrains Mono', monospace";
+const NAVY = "#0C1B33";
+const BLUE = "#2563EB";
+
+function fmtData(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function calcStatus(c: { dataInscricaoInicio: string; dataInscricaoFim: string }) {
+  const hoje = new Date();
+  const inicio = new Date(c.dataInscricaoInicio);
+  const fim = new Date(c.dataInscricaoFim);
+  if (inicio <= hoje && hoje <= fim) return "aberto" as const;
+  if (hoje < inicio) return "previsto" as const;
+  return "encerrado" as const;
+}
+
+const STATUS = {
+  aberto:    { label: "Aberto",    stripe: "bg-emerald-500", badge: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
+  previsto:  { label: "Previsto",  stripe: "bg-amber-400",   badge: "bg-amber-50 text-amber-700 border border-amber-200"       },
+  encerrado: { label: "Encerrado", stripe: "bg-slate-300",   badge: "bg-slate-100 text-slate-500 border border-slate-200"      },
+};
 
 export default function Home() {
   const { user, isAuthenticated, refresh } = useAuth();
   const [, navigate] = useLocation();
   const [loginOpen, setLoginOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState<"todos" | "aberto" | "previsto" | "encerrado">("todos");
   const utils = trpc.useUtils();
+
   const atualizarMutation = trpc.concursos.atualizar.useMutation({
     onSuccess: (data) => {
       toast.success(`${data.total} concursos atualizados!`);
       utils.concursos.list.invalidate();
     },
-    onError: (err) => {
-      toast.error(`Erro ao atualizar: ${err.message}`);
-    },
+    onError: (err) => toast.error(`Erro ao atualizar: ${err.message}`),
   });
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState("todos");
 
-  // Buscar concursos da API
   const { data: concursos = [], isLoading } = trpc.concursos.list.useQuery();
 
-  // Filtrar concursos baseado na busca e status
-  const concursosFiltrados = useMemo(() => {
-    let resultado = concursos;
-
-    // Filtrar por status (aberto, previsto, encerrado)
-    if (filterStatus !== "todos") {
-      const hoje = new Date();
-      resultado = resultado.filter((concurso) => {
-        const dataInicio = new Date(concurso.dataInscricaoInicio);
-        const dataFim = new Date(concurso.dataInscricaoFim);
-
-        if (filterStatus === "aberto") {
-          return dataInicio <= hoje && hoje <= dataFim;
-        } else if (filterStatus === "previsto") {
-          return hoje < dataInicio;
-        } else if (filterStatus === "encerrado") {
-          return hoje > dataFim;
-        }
-        return true;
-      });
-    }
-
-    // Filtrar por termo de busca (nome, cargo, banca)
-    if (searchTerm) {
-      const termo = searchTerm.toLowerCase();
-      resultado = resultado.filter(
-        (c) =>
-          c.nome.toLowerCase().includes(termo) ||
-          c.cargo.toLowerCase().includes(termo) ||
-          c.banca.toLowerCase().includes(termo)
-      );
-    }
-
-    return resultado;
-  }, [concursos, searchTerm, filterStatus]);
-
-  // Contar concursos por status
   const contadores = useMemo(() => {
-    const hoje = new Date();
-    let abertos = 0,
-      previstos = 0,
-      encerrados = 0;
-
+    let abertos = 0, previstos = 0, encerrados = 0;
     concursos.forEach((c) => {
-      const dataInicio = new Date(c.dataInscricaoInicio);
-      const dataFim = new Date(c.dataInscricaoFim);
-
-      if (dataInicio <= hoje && hoje <= dataFim) {
-        abertos++;
-      } else if (hoje < dataInicio) {
-        previstos++;
-      } else {
-        encerrados++;
-      }
+      const s = calcStatus(c);
+      if (s === "aberto") abertos++;
+      else if (s === "previsto") previstos++;
+      else encerrados++;
     });
-
     return { abertos, previstos, encerrados };
   }, [concursos]);
 
-  // Função para obter status do concurso
-  const obterStatus = (concurso: any) => {
-    const hoje = new Date();
-    const dataInicio = new Date(concurso.dataInscricaoInicio);
-    const dataFim = new Date(concurso.dataInscricaoFim);
-
-    if (dataInicio <= hoje && hoje <= dataFim) {
-      return { texto: "Aberto", cor: "bg-green-100 text-green-800" };
-    } else if (hoje < dataInicio) {
-      return { texto: "Previsto", cor: "bg-yellow-100 text-yellow-800" };
-    } else {
-      return { texto: "Encerrado", cor: "bg-gray-100 text-gray-800" };
+  const filtrados = useMemo(() => {
+    let r = concursos;
+    if (filterStatus !== "todos") r = r.filter((c) => calcStatus(c) === filterStatus);
+    if (searchTerm) {
+      const t = searchTerm.toLowerCase();
+      r = r.filter(
+        (c) =>
+          c.nome.toLowerCase().includes(t) ||
+          c.cargo.toLowerCase().includes(t) ||
+          c.banca.toLowerCase().includes(t)
+      );
     }
-  };
+    return r;
+  }, [concursos, searchTerm, filterStatus]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-slate-900">
-                Portal de Concursos
-              </h1>
-              <p className="text-slate-600 mt-1">
-                Encontre e se inscreva em concursos públicos
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() => atualizarMutation.mutate()}
-                disabled={atualizarMutation.isPending}
-                className="flex items-center gap-2"
-              >
-                <RefreshCw className={`h-4 w-4 ${atualizarMutation.isPending ? "animate-spin" : ""}`} />
-                {atualizarMutation.isPending ? "Atualizando..." : "Atualizar Concursos"}
-              </Button>
-              {isAuthenticated ? (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate("/candidato")}
+    <div className="min-h-screen" style={{ background: "#F1F5F9", fontFamily: "'Inter', sans-serif" }}>
+
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <header style={{ background: NAVY }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex items-center justify-between gap-4">
+          <div>
+            <p
+              className="text-[11px] font-semibold tracking-[0.2em] uppercase"
+              style={{ color: "#60A5FA", fontFamily: SYNE }}
+            >
+              República Federativa do Brasil
+            </p>
+            <h1
+              className="text-xl sm:text-2xl font-bold text-white leading-tight mt-0.5"
+              style={{ fontFamily: SYNE }}
+            >
+              Portal de Concursos Públicos
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => atualizarMutation.mutate()}
+              disabled={atualizarMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${atualizarMutation.isPending ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">
+                {atualizarMutation.isPending ? "Atualizando…" : "Atualizar"}
+              </span>
+            </button>
+
+            {isAuthenticated ? (
+              <>
+                <button
+                  onClick={() => navigate("/candidato")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <UserCircle className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Meu Painel</span>
+                </button>
+                {user?.role === "admin" && (
+                  <button
+                    onClick={() => navigate("/admin")}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
                   >
-                    Meu Painel
-                  </Button>
-                  {user?.role === "admin" && (
-                    <Button
-                      variant="outline"
-                      onClick={() => navigate("/admin")}
-                    >
-                      Painel Admin
-                    </Button>
-                  )}
-                </>
-              ) : null}
-            </div>
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Admin</span>
+                  </button>
+                )}
+              </>
+            ) : (
+              <button
+                onClick={() => setLoginOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                style={{ background: BLUE }}
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                Entrar
+              </button>
+            )}
           </div>
         </div>
       </header>
 
-      {/* Barra de Estatísticas */}
+      {/* ── Stats strip ────────────────────────────────────────── */}
       <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-              <p className="text-sm text-green-600 font-medium">Abertos</p>
-              <p className="text-3xl font-bold text-green-700">
-                {contadores.abertos}
-              </p>
-            </div>
-            <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-              <p className="text-sm text-yellow-600 font-medium">Previstos</p>
-              <p className="text-3xl font-bold text-yellow-700">
-                {contadores.previstos}
-              </p>
-            </div>
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <p className="text-sm text-gray-600 font-medium">Encerrados</p>
-              <p className="text-3xl font-bold text-gray-700">
-                {contadores.encerrados}
-              </p>
-            </div>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center gap-6 sm:gap-10">
+          <Stat value={contadores.abertos}    label="Abertos"    color="#10B981" />
+          <div className="w-px h-6 bg-slate-200" />
+          <Stat value={contadores.previstos}  label="Previstos"  color="#F59E0B" />
+          <div className="w-px h-6 bg-slate-200" />
+          <Stat value={contadores.encerrados} label="Encerrados" color="#94A3B8" />
+          <span className="ml-auto text-[11px] text-slate-400 hidden sm:block">
+            {concursos.length} concursos
+          </span>
+        </div>
+      </div>
+
+      {/* ── Search & Filters ───────────────────────────────────── */}
+      <div className="bg-white border-b border-slate-200">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col sm:flex-row gap-3">
+          <Input
+            placeholder="Buscar por órgão, cargo ou banca…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="flex-1 h-9 text-sm"
+          />
+          <div className="flex gap-1.5">
+            {(["todos", "aberto", "previsto", "encerrado"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setFilterStatus(s)}
+                className="px-3 py-1.5 rounded text-xs font-medium transition-colors"
+                style={{
+                  background: filterStatus === s ? NAVY : "#F1F5F9",
+                  color: filterStatus === s ? "#fff" : "#64748B",
+                }}
+              >
+                {s === "todos" ? "Todos" : s.charAt(0).toUpperCase() + s.slice(1)}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Filtros e Busca */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <Input
-                placeholder="Buscar por nome, cargo ou banca..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full"
-              />
-            </div>
-            <div className="flex gap-2">
-              {["todos", "aberto", "previsto", "encerrado"].map((status) => (
-                <Button
-                  key={status}
-                  variant={filterStatus === status ? "default" : "outline"}
-                  onClick={() => setFilterStatus(status)}
-                  className="capitalize"
-                >
-                  {status === "todos" ? "Todos" : status}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Lista de Concursos */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      {/* ── Card list ──────────────────────────────────────────── */}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {isLoading ? (
-          <div className="text-center py-12">
-            <p className="text-slate-600">Carregando concursos...</p>
-          </div>
-        ) : concursosFiltrados.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-slate-600 text-lg">
-              Nenhum concurso encontrado
-            </p>
-          </div>
+          <p className="text-center py-16 text-sm text-slate-400">Carregando concursos…</p>
+        ) : filtrados.length === 0 ? (
+          <p className="text-center py-16 text-sm text-slate-400">Nenhum concurso encontrado.</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {concursosFiltrados.map((concurso) => {
-              const status = obterStatus(concurso);
+          <div className="grid gap-3">
+            {filtrados.map((c) => {
+              const status = calcStatus(c);
+              const cfg = STATUS[status];
               return (
-                <Card
-                  key={concurso.id}
-                  className="hover:shadow-lg transition-shadow overflow-hidden"
-                >
-                  <div className="p-6">
-                    {/* Status Badge */}
-                    <div className="flex justify-between items-start mb-4">
-                      <h3 className="text-lg font-bold text-slate-900 flex-1">
-                        {concurso.nome}
-                      </h3>
-                      <span
-                        className={`text-xs font-semibold px-3 py-1 rounded-full ${status.cor}`}
-                      >
-                        {status.texto}
-                      </span>
-                    </div>
-
-                    {/* Informações */}
-                    <div className="space-y-3 mb-6 text-sm text-slate-600">
-                      <p>
-                        <span className="font-medium text-slate-900">
-                          Cargo:
-                        </span>{" "}
-                        {concurso.cargo}
-                      </p>
-                      <p>
-                        <span className="font-medium text-slate-900">
-                          Vagas:
-                        </span>{" "}
-                        {concurso.vagas}
-                      </p>
-                      <p>
-                        <span className="font-medium text-slate-900">
-                          Banca:
-                        </span>{" "}
-                        {concurso.banca}
-                      </p>
-                      <p>
-                        <span className="font-medium text-slate-900">
-                          Taxa:
-                        </span>{" "}
-                        R$ {parseFloat(concurso.valorInscricao).toFixed(2)}
-                      </p>
-                      <p>
-                        <span className="font-medium text-slate-900">
-                          Inscrições:
-                        </span>{" "}
-                        {new Date(concurso.dataInscricaoInicio).toLocaleDateString(
-                          "pt-BR"
-                        )}{" "}
-                        a{" "}
-                        {new Date(concurso.dataInscricaoFim).toLocaleDateString(
-                          "pt-BR"
-                        )}
-                      </p>
-                    </div>
-
-                    {/* Link para o portal/edital */}
-                    {concurso.edital && concurso.edital !== "#" && (
-                      <a
-                        href={concurso.edital}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block text-center text-sm text-blue-600 hover:underline mb-3"
-                      >
-                        Ver edital / portal da banca →
-                      </a>
-                    )}
-
-                    {/* Botão de Ação */}
-                    {isAuthenticated ? (
-                      <Button
-                        className="w-full"
-                        onClick={() =>
-                          navigate(`/inscricao/${concurso.id}`)
-                        }
-                      >
-                        Se Inscrever
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => setLoginOpen(true)}
-                      >
-                        Faça Login para se Inscrever
-                      </Button>
-                    )}
-                  </div>
-                </Card>
+                <ConcursoCard
+                  key={c.id}
+                  concurso={c}
+                  status={status}
+                  cfg={cfg}
+                  isAuthenticated={isAuthenticated}
+                  onLoginClick={() => setLoginOpen(true)}
+                  onInscreverClick={() => navigate(`/inscricao/${c.id}`)}
+                />
               );
             })}
           </div>
         )}
       </main>
+
       <LoginModal
         open={loginOpen}
         onClose={() => setLoginOpen(false)}
         onSuccess={() => refresh()}
       />
+    </div>
+  );
+}
+
+/* ── Sub-components ──────────────────────────────────────────────────────── */
+
+function Stat({ value, label, color }: { value: number; label: string; color: string }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="text-2xl font-semibold" style={{ color, fontFamily: MONO }}>
+        {value}
+      </span>
+      <span className="text-xs text-slate-500 font-medium">{label}</span>
+    </div>
+  );
+}
+
+function DataItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-1.5 text-xs">
+      <span className="text-slate-400">{label}</span>
+      <span className="font-medium text-slate-700" style={{ fontFamily: MONO }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+type CardProps = {
+  concurso: {
+    id: number;
+    nome: string;
+    cargo: string;
+    banca: string;
+    vagas: number;
+    valorInscricao: string;
+    dataInscricaoInicio: string;
+    dataInscricaoFim: string;
+    dataProva?: string | null;
+    edital?: string | null;
+  };
+  status: "aberto" | "previsto" | "encerrado";
+  cfg: typeof STATUS["aberto"];
+  isAuthenticated: boolean;
+  onLoginClick: () => void;
+  onInscreverClick: () => void;
+};
+
+function ConcursoCard({ concurso: c, status, cfg, isAuthenticated, onLoginClick, onInscreverClick }: CardProps) {
+  const pciLink = c.edital || null;
+  const valorFmt = Number(c.valorInscricao).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+
+  return (
+    <div className="relative bg-white rounded-lg border border-slate-200 overflow-hidden hover:shadow-md transition-shadow duration-200 group">
+      {/* Status stripe */}
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${cfg.stripe}`} />
+
+      <div className="pl-5 pr-4 pt-4 pb-4">
+        {/* Top row */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-semibold tracking-[0.15em] uppercase text-slate-400">
+              {c.banca}
+            </p>
+            <h2
+              className="text-[15px] font-semibold text-slate-900 leading-snug mt-0.5 group-hover:text-blue-700 transition-colors"
+              style={{ fontFamily: SYNE }}
+            >
+              {c.nome}
+            </h2>
+            <p className="text-sm text-slate-500 mt-0.5">{c.cargo}</p>
+          </div>
+          <span className={`shrink-0 text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${cfg.badge}`}>
+            {cfg.label}
+          </span>
+        </div>
+
+        {/* Data grid */}
+        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5">
+          <DataItem label="Vagas"      value={String(c.vagas)} />
+          <DataItem label="Taxa"       value={`R$ ${valorFmt}`} />
+          <DataItem label="Inscrições" value={`${fmtData(c.dataInscricaoInicio)} → ${fmtData(c.dataInscricaoFim)}`} />
+          {c.dataProva && <DataItem label="Prova" value={fmtData(c.dataProva)} />}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-4 flex flex-wrap gap-2 items-center">
+          {status === "encerrado" ? (
+            <span className="text-xs text-slate-400 font-medium">Inscrições encerradas</span>
+          ) : isAuthenticated ? (
+            <button
+              onClick={onInscreverClick}
+              className="px-3 py-1.5 rounded text-xs font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ background: BLUE }}
+            >
+              Se Inscrever
+            </button>
+          ) : (
+            <button
+              onClick={onLoginClick}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border text-blue-700 border-blue-200 hover:bg-blue-50 transition-colors"
+            >
+              <LogIn className="h-3 w-3" />
+              Entrar para se inscrever
+            </button>
+          )}
+
+          {pciLink && (
+            <>
+              <a href={pciLink} target="_blank" rel="noopener noreferrer">
+                <button className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
+                  <ExternalLink className="h-3 w-3" />
+                  Edital PCI
+                </button>
+              </a>
+              <a href={pciLink} target="_blank" rel="noopener noreferrer">
+                <button className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors">
+                  <ExternalLink className="h-3 w-3" />
+                  Portal da Banca
+                </button>
+              </a>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
