@@ -1,5 +1,4 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
@@ -13,13 +12,13 @@ const MONO = "'JetBrains Mono', monospace";
 const NAVY = "#0C1B33";
 const BLUE = "#2563EB";
 
-function fmtData(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
+function fmtData(val: string | Date | null | undefined): string {
+  if (!val) return "—";
+  const d = new Date(val);
+  return d.toLocaleDateString("pt-BR");
 }
 
-function calcStatus(c: { dataInscricaoInicio: string; dataInscricaoFim: string }) {
+function calcStatus(c: { dataInscricaoInicio: string | Date; dataInscricaoFim: string | Date }) {
   const hoje = new Date();
   const inicio = new Date(c.dataInscricaoInicio);
   const fim = new Date(c.dataInscricaoFim);
@@ -253,9 +252,9 @@ type CardProps = {
     banca: string;
     vagas: number;
     valorInscricao: string;
-    dataInscricaoInicio: string;
-    dataInscricaoFim: string;
-    dataProva?: string | null;
+    dataInscricaoInicio: string | Date;
+    dataInscricaoFim: string | Date;
+    dataProva?: string | Date | null;
     edital?: string | null;
     urlBanca?: string | null;
   };
@@ -299,7 +298,9 @@ function ConcursoCard({ concurso: c, status, cfg, isAuthenticated, onLoginClick,
         {/* Data grid */}
         <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5">
           <DataItem label="Vagas"      value={String(c.vagas)} />
-          <DataItem label="Taxa"       value={`R$ ${valorFmt}`} />
+          {Number(c.valorInscricao) > 0 && (
+            <DataItem label="Taxa" value={`R$ ${valorFmt}`} />
+          )}
           <DataItem label="Inscrições" value={`${fmtData(c.dataInscricaoInicio)} → ${fmtData(c.dataInscricaoFim)}`} />
           {c.dataProva && <DataItem label="Prova" value={fmtData(c.dataProva)} />}
         </div>
