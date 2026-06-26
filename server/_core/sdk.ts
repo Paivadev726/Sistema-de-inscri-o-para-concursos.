@@ -281,6 +281,21 @@ class SDKServer {
 
     // If user not in DB, sync from OAuth server automatically
     if (!user) {
+      // Fallback for local dev: no OAuth server configured, build synthetic user from session
+      if (!ENV.oAuthServerUrl) {
+        const now = new Date();
+        return {
+          id: -2,
+          openId: session.openId,
+          name: session.name || session.openId,
+          email: null,
+          loginMethod: "local",
+          role: session.openId === ENV.ownerOpenId ? "admin" : "user",
+          createdAt: now,
+          updatedAt: now,
+          lastSignedIn: now,
+        } as AuthenticatedUser;
+      }
       try {
         const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
         await db.upsertUser({

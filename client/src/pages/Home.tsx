@@ -6,10 +6,24 @@ import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
 import { useLocation } from "wouter";
+import { toast } from "sonner";
+import { RefreshCw } from "lucide-react";
+import { LoginModal } from "@/components/LoginModal";
 
 export default function Home() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, refresh } = useAuth();
   const [, navigate] = useLocation();
+  const [loginOpen, setLoginOpen] = useState(false);
+  const utils = trpc.useUtils();
+  const atualizarMutation = trpc.concursos.atualizar.useMutation({
+    onSuccess: (data) => {
+      toast.success(`${data.total} concursos atualizados!`);
+      utils.concursos.list.invalidate();
+    },
+    onError: (err) => {
+      toast.error(`Erro ao atualizar: ${err.message}`);
+    },
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("todos");
 
@@ -105,6 +119,15 @@ export default function Home() {
               </p>
             </div>
             <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => atualizarMutation.mutate()}
+                disabled={atualizarMutation.isPending}
+                className="flex items-center gap-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${atualizarMutation.isPending ? "animate-spin" : ""}`} />
+                {atualizarMutation.isPending ? "Atualizando..." : "Atualizar Concursos"}
+              </Button>
               {isAuthenticated ? (
                 <>
                   <Button
@@ -122,11 +145,7 @@ export default function Home() {
                     </Button>
                   )}
                 </>
-              ) : (
-                <Button onClick={() => (window.location.href = getLoginUrl())}>
-                  Entrar
-                </Button>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
@@ -260,6 +279,18 @@ export default function Home() {
                       </p>
                     </div>
 
+                    {/* Link para o portal/edital */}
+                    {concurso.edital && concurso.edital !== "#" && (
+                      <a
+                        href={concurso.edital}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-center text-sm text-blue-600 hover:underline mb-3"
+                      >
+                        Ver edital / portal da banca →
+                      </a>
+                    )}
+
                     {/* Botão de Ação */}
                     {isAuthenticated ? (
                       <Button
@@ -274,9 +305,7 @@ export default function Home() {
                       <Button
                         variant="outline"
                         className="w-full"
-                        onClick={() =>
-                          (window.location.href = getLoginUrl())
-                        }
+                        onClick={() => setLoginOpen(true)}
                       >
                         Faça Login para se Inscrever
                       </Button>
@@ -288,6 +317,11 @@ export default function Home() {
           </div>
         )}
       </main>
+      <LoginModal
+        open={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onSuccess={() => refresh()}
+      />
     </div>
   );
 }

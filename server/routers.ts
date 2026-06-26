@@ -1,9 +1,49 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
+import { spawn } from "child_process";
+import { existsSync, readFileSync } from "fs";
+import { resolve } from "path";
+
+function runScraper(): Promise<{ total: number; ultimaAtualizacao: string }> {
+  return new Promise((resolveFn, reject) => {
+    const pythonCmd = process.platform === "win32" ? "python" : "python3";
+    const scriptPath = resolve(process.cwd(), "scraper", "scraper.py");
+
+    function trySpawn(cmd: string) {
+      const proc = spawn(cmd, [scriptPath], {
+        cwd: process.cwd(),
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      proc.stdout.on("data", (d: Buffer) => process.stdout.write(d));
+      proc.stderr.on("data", (d: Buffer) => process.stderr.write(d));
+      proc.on("error", (err) => {
+        if (cmd === "python" && (err as NodeJS.ErrnoException).code === "ENOENT") {
+          trySpawn("py");
+        } else {
+          reject(err);
+        }
+      });
+      proc.on("close", (code) => {
+        if (code !== 0) return reject(new Error(`Scraper encerrou com código ${code}`));
+        resolveFn(lerResultado());
+      });
+    }
+
+    trySpawn(pythonCmd);
+  });
+}
+
+function lerResultado(): { total: number; ultimaAtualizacao: string } {
+  const jsonPath = resolve(process.cwd(), "scraper", "concursos_scraped.json");
+  if (!existsSync(jsonPath)) return { total: 0, ultimaAtualizacao: new Date().toISOString() };
+  const data = JSON.parse(readFileSync(jsonPath, "utf-8"));
+  return { total: data.total ?? 0, ultimaAtualizacao: data.ultimaAtualizacao ?? new Date().toISOString() };
+}
 
 export const appRouter = router({
   system: systemRouter,
@@ -12,9 +52,27 @@ export const appRouter = router({
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
+      return { success: true } as const;
+    }),
+    devLogin: publicProcedure.input(z.object({
+      name: z.string().min(1),
+      email: z.string().email(),
+    })).mutation(async ({ ctx, input }) => {
+      const openId = `local_${Buffer.from(input.email).toString("base64url")}`;
+      await db.upsertUser({
+        openId,
+        name: input.name,
+        email: input.email,
+        loginMethod: "local",
+        lastSignedIn: new Date(),
+      });
+      const sessionToken = await sdk.createSessionToken(openId, {
+        name: input.name,
+        expiresInMs: ONE_YEAR_MS,
+      });
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      return { success: true } as const;
     }),
   }),
 
@@ -65,6 +123,14 @@ export const appRouter = router({
         throw new Error('Apenas administradores podem deletar concursos');
       }
       return db.deleteConcurso(input.id);
+    }),
+    atualizar: publicProcedure.mutation(async () => {
+      try {
+        return await runScraper();
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Falha no scraper: ${msg}`);
+      }
     }),
   }),
 
